@@ -56,7 +56,8 @@ shovel time: 12시간
         결 국deploy 를위 한세팅 이필요 한시기 가.옴. 개발모드 와프로덕션 모드 를세팅하려 고할때
  왜이 걸하냐 .. 이 틀넘 게삽질했던 게도움 이될 지모르겠.음
 
-reviews와 wishLists 테이블의 참조값을 items에서 itemColors로 변경함
+    reviews와 wishLists 테이블의  의dev server port 3000에서 는적용되 지않아서
+이제부 터계 속빌드 를돌려 야된/... 우!왕참조값을 items에서 itemColors로 변경함
     fake값을 넣는 도중 확인했는데 이게 맞음. 왜 몰랐지?
     자꾸 바꾸다보니 foreign key 수정 정도는 뚞딲뚞딲 된다
 
@@ -81,7 +82,7 @@ aws setting:
     $ sudo su - 관리자 권한 획득
     $ apt-get update - apt-get 의 패키지 업데이
     $ apt-cache search mysql-server - mysql 패키지가 존재하는지 확인
-    $ apt-get install mysql-server-5.6 - mysql 설치 -> 비밀번호 설정하는 페이지로 이동
+    $ apt-get install mysql-server-5.7 - mysql 설치 -> 비밀번호 설정하는 페이지로 이동
 
 ***
 git folder:
@@ -91,7 +92,7 @@ git folder:
 mysql root password change:
     mysql 접속후
     use mysql;
-    update user set authentication_string=password('') where user='root';
+    update user set authentication_string=('password') where user='root';
 
 ***
 #2018-05-18
@@ -128,3 +129,132 @@ config:
     결국 deploy를 위한 세팅이 필요한 시기가 옴.. 개발모드와 프로덕션 모드를 세팅하려고 할때
     왜 이걸 하냐고.. 이틀 넘게 삽질했던게 도움이 될지 모르겠음.
 
+#2018-05-23
+***
+server:
+    불필요한 라인정리 및 파일 합치기. GraphQL을 써볼까하다가 RESTful하게 쓰는걸로..
+    GraphQL은 클라이언트에서 쿼리에 대한 이해가 필요한 것 같음
+#2018-05-24
+***
+axios:
+    express-session에서 페이지 새로고침이나 다음 페이지로 넘어갈 때마다 세션 종료됨.
+    문제는 axios에서 get 요청시마다 set cookie이 실행되어 sessionID가 바뀜.(cookie: connect sid <= token)
+    해결방법은 axios.get(~~~, withcredentials: true)을 붙이면 됨.
+    그리고 쿠키에 대한 내용은 C-R-A의 dev server port 3000에서는 적용되지 않아서
+    이제부터 계속 빌드를 돌려야 된다... 우왕!
+
+#2018-05-29
+***
+process.env:
+  colorize 폴더에서
+    export NODE_ENV=production
+    export NODE_ENV=develpment
+
+#2018-06-03
+***
+s3:
+    웹 서버에서 파일 업로드 버퍼를 처리하되 물리적으로 파일을 저장하지 않기 위해 메모리 스토리지 타입의 객체를 생성
+    웹 서버에 물리적으로 저장하는 것보다 아마존 S3 등을 이용하는 것이 좋은 이유는,
+    로드 밸런서 등을 활용하여 여러 웹 서버가 같은 Node.js 웹 서비스를 제공할 때 특정 서버만 파일을 보유하게 되는 현상 등이 생기는 것을 미연에 방지
+
+#2018-06-06
+***
+RDS:
+    mysql -h colorize.clfod2la3omk.ap-northeast-2.rds.amazonaws.com -p colorize -u colorize
+    mysql -h colorize.clfod2la3omk.ap-northeast-2.rds.amazonaws.com -p colorize -u colorize < server/8_mysql/schema.sql
+    set time_zone = 'Asia/Seoul';
+
+EC3:'ec2-13-125-176-32.ap-northeast-2.compute.amazonaws.com
+    chmod 400 colorize.pem
+    ssh -i "colorize.pem" ubuntu@ec2-52-78-69-229.ap-northeast-2.compute.amazonaws.com
+
+node.js update:
+    sudo apt-get purge --auto-remove nodejs
+    curl -sL https://deb.nodesource.com/setup_8.x | sudo -E bash -
+    sudo apt-get install -y nodejs
+
+#2018-06-07
+***
+RDS:
+    AWS에서 RDS mysql이 연결되지 않는 문제는
+    RDS 보안그룹 인바운드에 모든 트래픽 허용 규칙을 추가해줘서 해결함
+    안전한건지는 모르겠음 (EC2 포트만 연결하는 경우는 mysqlRDS 연결안됨)
+    => 모든 트래픽 지우고 소스를 211.48.51.34/32 에서 0.0.0.0/0으로 수정
+
+Nginx:
+    sudo service nginx restart
+    sudo vi /etc/nginx/nginx.conf
+    sudo vi /etc/nginx/sites-available/default
+
+    location / {
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header Host $http_host;
+      proxy_set_header X-NginX-Proxy true;
+      proxy_pass http://127.0.0.1:8080/;
+      proxy_redirect off;
+    }
+    sudo service nginx restart
+    되면 인바운드 8080 지우기!
+
+ALB:
+    로드 밸런서 프로토콜   로드 밸런서 포트  인스턴스 프로토콜   인스턴스 포트
+    HTTP	            80	          HTTP	          80   // 끄면 안됨.
+    HTTP	            8080          HTTP	          80   // 꺼도 됨.
+    HTTPS	            443	          HTTP	          80   // 8080으로 하면 오래걸려서 80으로 바꿈.! 빨라짐
+
+	location / {
+ 
+		if ($http_x_forwarded_proto != "https") {
+			rewrite ^(.*)$ https://$server_name$1 permanent;
+		}
+
+#2018.06.08
+***
+Nginx: 
+  1) 리다이렉트한다는 부분 필요없더라
+    server {
+        listen 80;
+        server_name www.colorize.io;
+        return 301 $scheme://colorize.io;
+    }
+  2) 80포트 요청을 443으로.. https로 리다이렉팅 되지만 접속이 안됨..
+    server {
+        listen 80;
+        server_name colorize.io;
+        return 301 https://$server_name$request_uri;
+    }
+
+    server {
+        listen 443 ssl;
+        server_name colorize.io;
+    }
+  3) 세번째 방법.. 두번째 방법의 443 포트는 빼고
+    server {
+       listen         80;
+       server_name    colorize.io www.colorize.io;
+       rewrite        ^ https://$server_name$request_uri? permanent;
+    }
+
+    server {
+       listen         1443;
+       server_name    colorize.io www.colorize.io;
+   } 
+
+HSTS:
+    Strict-Transport-Security: max-age=31536000;
+#2018.06.09
+***
+Nginx:
+    모바일 사진 2.4메가 업로드시 413 에러 발생
+    sudo nano /etc/nginx/nginx.conf
+    
+server {
+        listen 80;
+        client_max_body_size 5M;
+
+        server_name colorize.io www.colorize.io;
+
+        if ($http_x_forwarded_proto = 'http') {
+                return 301 https://$server_name$request_uri;
+        }
